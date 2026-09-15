@@ -271,12 +271,15 @@ while IFS="$(printf '\t')" read -r id cat name script timeout desc <&3; do
     printf '  -> %s\n' "$status" >&2
 done 3<"$SELECTED"
 
+# Tell the recorder to stop feeding input, then give any key already in
+# flight a moment to land before the final table is shown.
+printf '\nlivediag: done.  Report: %s/report.txt\n' "$LG_SESSION" >&2
+sleep 2
+
 lg_progress_finish
 
 lg_write_environment
 sh "$LG_ROOT/lib/report.sh" "$LG_SESSION" >/dev/null 2>&1
-
-printf '\nlivediag: done.  Report: %s/report.txt\n' "$LG_SESSION" >&2
 
 # Summary table, worst first.  Table only, with the note for every check.
 summary="$LG_SESSION/summary.tsv"

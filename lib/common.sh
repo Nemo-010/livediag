@@ -423,6 +423,9 @@ lg_progress_finish() {
     if [ -n "$LG_PROGRESS_FIFO" ]; then
         printf '100\n# All checks finished\n' >&9 2>/dev/null || true
         exec 9>&- 2>/dev/null || true
+        # Do not wait forever for the dialog to notice; close it ourselves.
+        sleep 1
+        kill "$LG_PROGRESS_PID" 2>/dev/null || true
         wait "$LG_PROGRESS_PID" 2>/dev/null || true
         rm -f "$LG_PROGRESS_FIFO"
         LG_PROGRESS_FIFO=""
