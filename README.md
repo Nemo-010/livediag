@@ -70,6 +70,8 @@ detected and reported, but there is no separate interactive flow yet.
 | 43 | Vibration | **D** |
 | 44 | Flashlight / camera flash | **D** |
 | 45 | Physical buttons (power, volume) | **D** |
+| 46 | Machine identity (vendor, model, chassis) | **S** `core-system` |
+| 47 | Devices with no Linux driver | **S** `hardware-unsupported` |
 
 The `D` rows are intentional: the ecosystem for those is either phone-only or
 needs a vendor daemon that a generic image should not assume.  They are listed
