@@ -69,7 +69,12 @@ class StageWindow:
         self.note.set_line_wrap(True)
         outer.pack_start(self.note, False, False, 0)
 
-        stop = Gtk.Button(label="Stop after this check")
+        stop = Gtk.Button(label="Stop after this check (click)")
+        # Never keyboard-activatable: an accidental or injected Enter must not
+        # end the run.
+        stop.set_can_focus(False)
+        stop.set_can_default(False)
+        stop.set_focus_on_click(False)
         stop.connect("clicked", self.on_stop)
         outer.pack_start(stop, False, False, 0)
 
