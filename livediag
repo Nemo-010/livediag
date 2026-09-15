@@ -1,0 +1,271 @@
+#!/bin/sh
+# livediag - interactive live-system diagnostics for laptops, desktops and phones.
+#
+# This script is only a front end: it reads tests/tests.list, runs the
+# matching modules in tests/ and then calls lib/report.sh.  Every module can
+# also be run on its own.
+
+SELF=$0
+SELF=$(readlink -f "$SELF" 2>/dev/null || printf '%s' "$SELF")
+BIN_DIR=$(CDPATH= cd -- "$(dirname -- "$SELF")" && pwd)
+
+LG_ROOT=""
+if [ -d "$BIN_DIR/tests" ] && [ -d "$BIN_DIR/lib" ]; then
+    LG_ROOT=$BIN_DIR
+elif [ -d "/usr/share/livediag/tests" ]; then
+    LG_ROOT=/usr/share/livediag
+elif [ -d "$BIN_DIR/../share/livediag/tests" ]; then
+    LG_ROOT=$(CDPATH= cd -- "$BIN_DIR/../share/livediag" && pwd)
+fi
+
+if [ -z "$LG_ROOT" ]; then
+    printf 'livediag: cannot find the tests directory next to %s or in /usr/share/livediag\n' "$0" >&2
+    exit 1
+fi
+
+LG_ROOT=${LG_ROOT%/}
+export LG_ROOT
+. "$LG_ROOT/lib/common.sh"
+
+MANIFEST="$LG_ROOT/tests/tests.list"
+
+MODE=interactive
+ONLY=""
+CATEGORY=""
+REPORT_DIR=""
+
+usage() {
+    cat <<EOF
+livediag $LG_VERSION - live system diagnostics
+
+Usage: livediag [options]
+
+  (no options)            show a menu and run the chosen tests
+  --all                   run every module
+  --quick                 run the essential modules only
+  --only ID[,ID...]       run these module ids
+  --category NAME         run every module in a category (case-insensitive)
+  --list                  print the module list and exit
+  --report DIR            build report.txt for a previous session and exit
+  --no-ui                 never open a window; use the terminal only
+  --non-interactive       same as --no-ui, and skip every manual step
+  --version               print the version
+  --help                  this text
+
+Results are written to a fresh directory under \$HOME/livediag-results
+(or \$LIVEDIAG_OUTDIR).  Each run also produces report.txt.
+EOF
+}
+
+need_arg() {
+    [ -n "${1:-}" ] || {
+        printf 'livediag: --%s needs a value\n' "$2" >&2
+        exit 2
+    }
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+    --all) MODE=all ;;
+    --quick) MODE=quick ;;
+    --only)
+        need_arg "${2:-}" only
+        MODE=only
+        ONLY=$2
+        shift
+        ;;
+    --category)
+        need_arg "${2:-}" category
+        MODE=category
+        CATEGORY=$2
+        shift
+        ;;
+    --list) MODE=list ;;
+    --report)
+        need_arg "${2:-}" report
+        REPORT_DIR=$2
+        MODE=report
+        shift
+        ;;
+    --no-ui) LIVEDIAG_NO_UI=1; export LIVEDIAG_NO_UI ;;
+    --non-interactive)
+        LIVEDIAG_NONINTERACTIVE=1
+        export LIVEDIAG_NONINTERACTIVE
+        ;;
+    --version)
+        printf 'livediag %s\n' "$LG_VERSION"
+        exit 0
+        ;;
+    --help | -h)
+        usage
+        exit 0
+        ;;
+    *)
+        printf 'livediag: unknown option %s\n' "$1" >&2
+        usage >&2
+        exit 2
+        ;;
+    esac
+    shift
+done
+
+manifest_rows() {
+    awk -F'\t' '!/^[[:space:]]*#/ && NF >= 7 { print }' "$MANIFEST"
+}
+
+if [ "$MODE" = "list" ]; then
+    manifest_rows | while IFS="$(printf '\t')" read -r id cat name script timeout essential desc; do
+        printf '%-20s %-11s %-18s %s\n' "$id" "$cat" "$name" "$desc"
+    done
+    exit 0
+fi
+
+if [ "$MODE" = "report" ]; then
+    [ -d "$REPORT_DIR" ] || {
+        printf 'livediag: no such session: %s\n' "$REPORT_DIR" >&2
+        exit 1
+    }
+    sh "$LG_ROOT/lib/report.sh" "$REPORT_DIR"
+    exit $?
+fi
+
+# --------------------------------------------------------------------------
+# session
+# --------------------------------------------------------------------------
+
+LG_SESSION=$(lg_new_session)
+LIVEDIAG_SESSION=$LG_SESSION
+lg_init
+lg_write_environment
+
+SELECTED="$LG_SESSION/selected.tsv"
+: >"$SELECTED"
+
+case "$MODE" in
+all)
+    manifest_rows | while IFS="$(printf '\t')" read -r id cat name script timeout essential desc; do
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$id" "$cat" "$name" "$script" "$timeout" "$desc"
+    done >"$SELECTED"
+    ;;
+quick)
+    manifest_rows | while IFS="$(printf '\t')" read -r id cat name script timeout essential desc; do
+        [ "$essential" = "yes" ] || continue
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$id" "$cat" "$name" "$script" "$timeout" "$desc"
+    done >"$SELECTED"
+    ;;
+category)
+    manifest_rows | while IFS="$(printf '\t')" read -r id cat name script timeout essential desc; do
+        [ "$(printf '%s' "$cat" | tr 'A-Z' 'a-z')" = "$(printf '%s' "$CATEGORY" | tr 'A-Z' 'a-z')" ] || continue
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$id" "$cat" "$name" "$script" "$timeout" "$desc"
+    done >"$SELECTED"
+    ;;
+only)
+    for want in $(printf '%s' "$ONLY" | tr ',' ' '); do
+        found=$(manifest_rows | awk -F'\t' -v w="$want" '$1==w{print $1}')
+        if [ -z "$found" ]; then
+            printf 'livediag: unknown test id: %s\n' "$want" >&2
+            continue
+        fi
+        manifest_rows | while IFS="$(printf '\t')" read -r id cat name script timeout essential desc; do
+            [ "$id" = "$want" ] || continue
+            printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$id" "$cat" "$name" "$script" "$timeout" "$desc"
+        done >>"$SELECTED"
+    done
+    ;;
+esac
+
+if [ "$MODE" = "interactive" ]; then
+    total=$(manifest_rows | wc -l | tr -d ' ')
+    choice=$(lg_ui_menu "livediag" "Live system diagnostics.
+
+Choose a run.  Every test is read-only unless it clearly says otherwise; the read/write and printer tests ask first." \
+        full "Full test" "Run all $total modules" \
+        quick "Quick test" "Run only the essential modules" \
+        custom "Choose modules" "Pick individual modules from a checklist" \
+        quit "Quit" "Exit without testing") || choice=quick
+
+    case "$choice" in
+    full)
+        manifest_rows | while IFS="$(printf '\t')" read -r id cat name script timeout essential desc; do
+            printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$id" "$cat" "$name" "$script" "$timeout" "$desc"
+        done >"$SELECTED"
+        ;;
+    quick)
+        manifest_rows | while IFS="$(printf '\t')" read -r id cat name script timeout essential desc; do
+            [ "$essential" = "yes" ] || continue
+            printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$id" "$cat" "$name" "$script" "$timeout" "$desc"
+        done >"$SELECTED"
+        ;;
+    custom)
+        manifest_rows | awk -F'\t' '{ print $1 "\t" $3 "\t" $7 }' |
+            lg_ui_checklist "livediag" "Uncheck anything you do not want to run." >"$LG_SESSION/picked.txt"
+        while IFS= read -r id; do
+            [ -n "$id" ] || continue
+            manifest_rows | while IFS="$(printf '\t')" read -r mid cat name script timeout essential desc; do
+                [ "$mid" = "$id" ] || continue
+                printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$mid" "$cat" "$name" "$script" "$timeout" "$desc"
+            done >>"$SELECTED"
+        done <"$LG_SESSION/picked.txt"
+        ;;
+    *)
+        printf 'livediag: nothing selected\n'
+        exit 0
+        ;;
+    esac
+fi
+
+count=$(wc -l <"$SELECTED" | tr -d ' ')
+if [ "$count" -eq 0 ]; then
+    printf 'livediag: nothing to run\n' >&2
+    exit 1
+fi
+
+lg_ui_info "livediag $LG_VERSION
+
+$count module(s) will run.  Each one explains itself before doing anything destructive.
+Results: $LG_SESSION"
+
+# --------------------------------------------------------------------------
+# run
+# --------------------------------------------------------------------------
+
+ran=0
+while IFS="$(printf '\t')" read -r id cat name script timeout desc <&3; do
+    [ -n "$id" ] || continue
+    ran=$((ran + 1))
+    printf '\n\033[1m[%d/%d] %s\033[0m\n' "$ran" "$count" "$name" >&2
+    if lg_have timeout; then
+        timeout "$timeout" sh "$LG_ROOT/tests/$script"
+    else
+        sh "$LG_ROOT/tests/$script"
+    fi
+    rc=$?
+    status=$(awk -F'\t' -v id="$id" '$2 == id { st = $3 } END { print st }' "$LG_RESULTS")
+    if [ -z "$status" ]; then
+        if [ "$rc" = "124" ]; then
+            printf '%s\t%s\tTIMEOUT\t%s\ttimed out after %ss\t%s\n' \
+                "$(date '+%Y-%m-%d %H:%M:%S')" "$id" "$name" "$timeout" "$cat" >>"$LG_RESULTS"
+            status=TIMEOUT
+        else
+            printf '%s\t%s\tWARN\t%s\texited %s without a result\t%s\n' \
+                "$(date '+%Y-%m-%d %H:%M:%S')" "$id" "$name" "$rc" "$cat" >>"$LG_RESULTS"
+            status=WARN
+        fi
+    fi
+    printf '  -> %s\n' "$status" >&2
+done 3<"$SELECTED"
+
+lg_write_environment
+sh "$LG_ROOT/lib/report.sh" "$LG_SESSION" >/dev/null 2>&1
+
+printf '\nlivediag: done.  Report: %s/report.txt\n' "$LG_SESSION" >&2
+if lg_ui_available; then
+    lg_ui_text "livediag report - $LG_SESSION" "$LG_SESSION/report.txt"
+    lg_ui_info "Report saved to:
+
+$LG_SESSION/report.txt
+
+Thank you for testing.  To provide the software that shapes the world of tomorrow."
+else
+    cat "$LG_SESSION/report.txt" >&2
+fi

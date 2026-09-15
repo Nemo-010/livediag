@@ -1,0 +1,47 @@
+# livediag test manifest
+#
+# One line per test module, tab separated.  The runner reads this file to
+# build menus, order the run and know which tests are essential.
+#
+#   id           stable identifier (also used with --only and in results)
+#   category     grouping shown in menus and in the report
+#   name         short human label
+#   script       file inside this directory
+#   timeout      seconds before the runner kills the module
+#   essential    yes/no; "livediag --quick" runs the "yes" ones
+#   description  one line, shown in the menu and the report
+#
+core-cpu	Core	CPU	10-core-cpu.sh	120	yes	CPU model, cores, frequency and a short stability check
+core-mem	Core	Memory	11-core-mem.sh	180	yes	RAM and swap capacity, memory errors, optional memtester pass
+core-time	Core	Clock	12-core-time.sh	60	yes	Date, timezone, hardware clock and NTP synchronisation
+storage-disk	Storage	Disks	20-storage-disk.sh	180	no	Block devices, media type and SMART health
+storage-rw	Storage	Read/Write	21-storage-rw.sh	180	yes	Write, flush, read back and delete a file; measure throughput
+display-output	Display	Output	30-display-output.sh	90	yes	Outputs, connectors and resolution
+display-gpu	Display	GPU	31-display-gpu.sh	180	yes	GPU driver, OpenGL/Vulkan and hardware acceleration
+display-backlight	Display	Backlight	32-display-backlight.sh	90	no	Panel backlight range and live brightness control
+input-keyboard	Input	Keyboard	40-input-keyboard.sh	120	yes	Typing test covering letters, digits and punctuation
+input-pointer	Input	Pointer	41-input-pointer.sh	120	yes	Touchpad/mouse movement, buttons and scrolling
+input-touch	Input	Touchscreen	42-input-touch.sh	90	no	Touchscreen tap and drag
+audio-output	Audio	Speakers	50-audio-output.sh	120	yes	Left/right speaker and headphone output
+audio-input	Audio	Microphone	51-audio-input.sh	120	no	Record and play back from the microphone
+video-camera	Video	Camera	52-video-camera.sh	120	no	Webcam capture and preview
+network-wifi	Network	Wi-Fi	60-network-wifi.sh	300	yes	Scan, connect to a mobile hotspot and verify the link
+network-ethernet	Network	Ethernet	61-network-ethernet.sh	180	no	Wired link, carrier and DHCP
+network-internet	Network	Connectivity	62-network-internet.sh	120	yes	DNS and reachability of five independent resolvers
+network-bluetooth	Network	Bluetooth	63-network-bluetooth.sh	180	no	Adapter power, scan and optional pairing
+network-btaudio	Network	Bluetooth audio	64-network-btaudio.sh	120	no	Bluetooth headset/speaker output
+network-rndis	Network	USB tethering	65-network-rndis.sh	240	no	USB RNDIS/NCM tethering from a phone
+network-wwan	Network	Mobile broadband	66-network-wwan.sh	180	no	WWAN modem, SIM and registration
+power-battery	Power	Battery	70-power-battery.sh	120	yes	Battery status, health and discharge behaviour
+power-ac	Power	Charger	71-power-ac.sh	120	no	AC/USB-C power supply detection and hotplug
+power-suspend	Power	Suspend	72-power-suspend.sh	120	no	Suspend to RAM and resume
+thermal	Thermal	Temperatures	73-thermal.sh	180	yes	Temperature sensors, fans and throttling
+sensor-motion	Sensors	Motion	80-sensor-motion.sh	90	no	Accelerometer/gyroscope readings
+sensor-light	Sensors	Light	81-sensor-light.sh	90	no	Ambient light and proximity readings
+sensor-gps	Sensors	GPS	82-sensor-gps.sh	300	no	GNSS receiver and position fix
+usb-devices	Peripherals	USB	90-usb-devices.sh	120	no	USB controllers and hotplug detection
+usb-storage	Peripherals	USB storage	91-usb-storage.sh	180	no	USB mass storage detection and safe read
+sdcard	Peripherals	SD card	92-sdcard.sh	180	no	SD card reader detection and identification
+fingerprint	Peripherals	Fingerprint	93-fingerprint.sh	120	no	Fingerprint reader detection and verification
+gamepad	Peripherals	Gamepad	94-gamepad.sh	120	no	Game controller buttons and axes
+printer	Peripherals	Printer	95-printer.sh	120	no	CUPS printer queue and test page

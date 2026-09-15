@@ -1,0 +1,34 @@
+# Maintainer: livediag contributors
+pkgname=livediag
+pkgver=0.1.0
+pkgrel=0
+pkgdesc="Interactive live-system diagnostics for Linux (Wi-Fi, Bluetooth, sound, battery and more)"
+url="https://example.invalid/livediag"
+arch="noarch"
+license="MIT"
+depends="zenity iproute2 iputils usbutils pciutils util-linux alsa-utils"
+# Recommended for a complete run.  They are not hard dependencies because the
+# suite degrades to a SKIP when a tool is absent, but an install-party image
+# wants all of them:
+#   networkmanager wpa_supplicant iwd bluez modemmanager
+#   mesa-demos vulkan-tools libinput-tools v4l-utils ffmpeg fswebcam
+#   lm-sensors smartmontools upower memtester iio-sensor-proxy
+#   fprintd linuxconsoletools cups-client gpsd font-dejavu
+makedepends=""
+subpackages=""
+# Replace OWNER with the account or organisation that hosts the repository.
+source="$pkgname-$pkgver.tar.gz::https://github.com/OWNER/$pkgname/archive/v$pkgver.tar.gz"
+builddir="$srcdir/$pkgname-$pkgver"
+
+build() {
+	:
+}
+
+check() {
+	make -C "$builddir" check
+}
+
+package() {
+	make -C "$builddir" install \
+		DESTDIR="$pkgdir" PREFIX=/usr
+}
