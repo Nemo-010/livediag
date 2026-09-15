@@ -220,14 +220,19 @@ if [ "$count" -eq 0 ]; then
     exit 1
 fi
 
+LG_STAGES_FILE="$LG_SESSION/stages.tsv"
+LG_STOP_FILE="$LG_SESSION/stop"
+rm -f "$LG_STOP_FILE"
+cut -f1,3 "$SELECTED" >"$LG_STAGES_FILE" 2>/dev/null || true
 lg_progress_start "livediag - $count checks" "$count"
-lg_progress_set 0 "Starting $count checks.  This window follows along."
+lg_progress_set 0 "Starting $count checks."
 
 # --------------------------------------------------------------------------
 # run
 # --------------------------------------------------------------------------
 
 ran=0
+stopped=0
 pass=0
 warn=0
 fail=0
@@ -236,6 +241,12 @@ passed_names=""
 while IFS="$(printf '\t')" read -r id cat name script timeout desc <&3; do
     [ -n "$id" ] || continue
     ran=$((ran + 1))
+    if lg_stop_requested; then
+        printf '\nlivediag: stopping early at your request\n' >&2
+        stopped=1
+        break
+    fi
+    lg_progress_stage "$id" running
     lg_progress_set $((ran - 1)) "Now: $name  |  $pass passed, $warn warn, $fail failed, $skip skipped"
     printf '\n\033[1m[%d/%d] %s\033[0m\n' "$ran" "$count" "$name" >&2
     if lg_have timeout; then
@@ -257,11 +268,12 @@ while IFS="$(printf '\t')" read -r id cat name script timeout desc <&3; do
         fi
     fi
     case "$status" in
-    PASS) pass=$((pass + 1)); passed_names="$passed_names $name" ;;
-    WARN) warn=$((warn + 1)) ;;
-    SKIP) skip=$((skip + 1)) ;;
-    *) fail=$((fail + 1)) ;;
+    PASS) pass=$((pass + 1)); passed_names="$passed_names $name"; stage_status=pass ;;
+    WARN) warn=$((warn + 1)); stage_status=warn ;;
+    SKIP) skip=$((skip + 1)); stage_status=skip ;;
+    *) fail=$((fail + 1)); stage_status=fail ;;
     esac
+    lg_progress_stage "$id" "$stage_status"
     recent=$(printf '%s' "$passed_names" | awk '{
         n = NF; s = ""
         for (i = (n > 3 ? n - 2 : 1); i <= n; i++) s = s (s ? ", " : "") $i
@@ -297,7 +309,9 @@ while IFS="$(printf '\t')" read -r _rank _status _name _note; do
     set -- "$@" "$_status" "$_name" "$_note"
 done <"$summary"
 
-lg_ui_table "livediag - $count checks: $pass passed, $warn warning, $fail failed, $skip skipped" "" "$@"
+title="livediag - $count checks: $pass passed, $warn warning, $fail failed, $skip skipped"
+[ "$stopped" = "1" ] && title="$title (stopped early)"
+lg_ui_table "$title" "" "$@"
 
 if lg_ui_available; then
     lg_ui_info "Full report saved to:

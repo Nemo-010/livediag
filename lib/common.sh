@@ -374,6 +374,17 @@ lg_busy() {
 LG_PROGRESS_FIFO=""
 LG_PROGRESS_PID=""
 LG_PROGRESS_TOTAL=0
+LG_PROGRESS_BACKEND=text
+LG_STAGES_FILE=""
+LG_STOP_FILE=""
+
+# The stage window is preferred: it shows what is done and what is next.
+# Fall back to a zenity progress bar, then to the terminal.
+lg_progress_backend_available() {
+    [ -n "${LG_ROOT:-}" ] && [ -n "$LG_STAGES_FILE" ] && [ -r "$LG_STAGES_FILE" ] &&
+        [ -r "$LG_ROOT/lib/stages.py" ] && lg_have python3 &&
+        python3 -c 'import gi; gi.require_version("Gtk", "3.0")' >/dev/null 2>&1
+}
 
 # lg_progress_start TITLE TOTAL
 lg_progress_start() {
@@ -381,25 +392,45 @@ lg_progress_start() {
     LG_PROGRESS_TOTAL=${2:-0}
     LG_PROGRESS_FIFO=""
     LG_PROGRESS_PID=""
+    LG_PROGRESS_BACKEND=text
     if lg_ui_available; then
         _lg_fifo="${TMPDIR:-/tmp}/livediag-progress.$$"
         rm -f "$_lg_fifo"
         if mkfifo "$_lg_fifo" 2>/dev/null; then
-            LG_PROGRESS_FIFO=$_lg_fifo
-            (
-                zenity --progress --no-markup --no-cancel --auto-close \
-                    --title="$LG_PROGRESS_TITLE" \
-                    --text="Preparing the checks..." \
-                    --percentage=0 --width=540 <"$_lg_fifo" >/dev/null 2>&1
-            ) &
-            LG_PROGRESS_PID=$!
-            # Read-write so this never blocks waiting for a reader and never
-            # raises SIGPIPE if zenity goes away early.
-            exec 9<>"$_lg_fifo"
-            return 0
+            if lg_progress_backend_available; then
+                LG_PROGRESS_BACKEND=stages
+                python3 "$LG_ROOT/lib/stages.py" \
+                    --stages "$LG_STAGES_FILE" --fifo "$_lg_fifo" \
+                    --stop-file "${LG_STOP_FILE:-$LG_SESSION/stop}" \
+                    --title "$LG_PROGRESS_TITLE" >/dev/null 2>&1 &
+                LG_PROGRESS_PID=$!
+                LG_PROGRESS_FIFO=$_lg_fifo
+                exec 9<>"$_lg_fifo"
+                return 0
+            fi
+            if lg_have zenity; then
+                LG_PROGRESS_BACKEND=zenity
+                (
+                    zenity --progress --no-markup --no-cancel --auto-close \
+                        --title="$LG_PROGRESS_TITLE" \
+                        --text="Preparing the checks..." \
+                        --percentage=0 --width=540 <"$_lg_fifo" >/dev/null 2>&1
+                ) &
+                LG_PROGRESS_PID=$!
+                LG_PROGRESS_FIFO=$_lg_fifo
+                # Read-write so this never blocks waiting for a reader and
+                # never raises SIGPIPE if the window goes away early.
+                exec 9<>"$_lg_fifo"
+                return 0
+            fi
+            rm -f "$_lg_fifo"
         fi
     fi
     printf 'livediag: %s check(s) queued\n' "$LG_PROGRESS_TOTAL" >&2
+}
+
+lg_progress_emit() {
+    [ -n "$LG_PROGRESS_FIFO" ] && printf '%s\n' "$*" >&9 2>/dev/null || true
 }
 
 # lg_progress_set DONE MESSAGE
@@ -412,18 +443,51 @@ lg_progress_set() {
         _lg_pct=$((_lg_done * 100 / LG_PROGRESS_TOTAL))
     fi
     [ "$_lg_pct" -gt 100 ] && _lg_pct=100
-    if [ -n "$LG_PROGRESS_FIFO" ]; then
+    case "$LG_PROGRESS_BACKEND" in
+    stages)
+        lg_progress_emit "progress $_lg_done $LG_PROGRESS_TOTAL"
+        lg_progress_emit "note $_lg_msg"
+        ;;
+    zenity)
         printf '%s\n# %s\n' "$_lg_pct" "$_lg_msg" >&9 2>/dev/null || true
-    else
+        ;;
+    *)
         printf 'livediag: [%s/%s] %s\n' "$_lg_done" "$LG_PROGRESS_TOTAL" "$_lg_msg" >&2
-    fi
+        ;;
+    esac
+}
+
+# lg_progress_stage ID pending|running|pass|warn|fail|skip
+lg_progress_stage() {
+    case "$LG_PROGRESS_BACKEND" in
+    stages) lg_progress_emit "set $1 $2" ;;
+    esac
+}
+
+lg_progress_note() {
+    case "$LG_PROGRESS_BACKEND" in
+    stages) lg_progress_emit "note $*" ;;
+    esac
+}
+
+# True when the person pressed "Stop after this check".
+lg_stop_requested() {
+    [ -n "${LG_STOP_FILE:-}" ] && [ -e "$LG_STOP_FILE" ]
 }
 
 lg_progress_finish() {
     if [ -n "$LG_PROGRESS_FIFO" ]; then
-        printf '100\n# All checks finished\n' >&9 2>/dev/null || true
+        case "$LG_PROGRESS_BACKEND" in
+        stages)
+            lg_progress_emit "progress $LG_PROGRESS_TOTAL $LG_PROGRESS_TOTAL"
+            lg_progress_emit "close"
+            ;;
+        *)
+            printf '100\n# All checks finished\n' >&9 2>/dev/null || true
+            ;;
+        esac
         exec 9>&- 2>/dev/null || true
-        # Do not wait forever for the dialog to notice; close it ourselves.
+        # Do not wait forever for the window to notice; close it ourselves.
         sleep 1
         kill "$LG_PROGRESS_PID" 2>/dev/null || true
         wait "$LG_PROGRESS_PID" 2>/dev/null || true

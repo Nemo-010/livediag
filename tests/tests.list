@@ -15,6 +15,7 @@ core-cpu	Core	CPU	10-core-cpu.sh	120	yes	CPU model, cores, frequency and a short
 core-mem	Core	Memory	11-core-mem.sh	180	yes	RAM and swap capacity, memory errors, optional memtester pass
 core-time	Core	Clock	12-core-time.sh	60	yes	Date, timezone, hardware clock and NTP synchronisation
 core-system	Core	System	13-core-system.sh	60	no	DMI vendor, model, board and chassis form factor
+core-firmware	Core	Firmware	14-core-firmware.sh	60	yes	Secure Boot, TPM, internal disk visibility and Windows/BitLocker
 storage-disk	Storage	Disks	20-storage-disk.sh	180	no	Block devices, media type and SMART health
 storage-rw	Storage	Read/Write	21-storage-rw.sh	180	yes	Write, flush, read back and delete a file; measure throughput
 display-output	Display	Output	30-display-output.sh	90	yes	Outputs, connectors and resolution

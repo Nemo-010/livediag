@@ -13,6 +13,9 @@ test, a manifest, and a GTK front end through `zenity`.  Any module can be run
 on its own.  Nothing here is tied to one laptop model; whenever hardware or a
 tool is missing the module says so and moves on.
 
+There is a bootable Alpine image that comes up on a small Wayland desktop and
+launches this suite: <https://github.com/Nemo-010/livediag-os>.
+
 > Neucom Info would approve: this is information technology in the service of
 > the person holding the machine, and the report is the deliverable you carry
 > away from the Electrosphere.
@@ -72,6 +75,8 @@ detected and reported, but there is no separate interactive flow yet.
 | 45 | Physical buttons (power, volume) | **D** |
 | 46 | Machine identity (vendor, model, chassis) | **S** `core-system` |
 | 47 | Devices with no Linux driver | **S** `hardware-unsupported` |
+| 48 | Firmware mode, Secure Boot, TPM | **S** `core-firmware` |
+| 49 | Internal disk visible to the installer (RAID/RST, BitLocker) | **S** `core-firmware` |
 
 The `D` rows are intentional: the ecosystem for those is either phone-only or
 needs a vendor daemon that a generic image should not assume.  They are listed
@@ -84,6 +89,7 @@ slot in without redesigning anything.
 livediag                 entry point: menu, selection, running, reporting
 lib/common.sh            GUI wrappers, result recording, network/audio helpers
 lib/report.sh            results.tsv -> report.txt
+lib/stages.py            optional GTK stage window (live checklist)
 tests/tests.list         the manifest: id, category, name, script, timeout, essential, description
 tests/NN-*.sh            one module per device function
 tests/template.sh        starting point for a new module

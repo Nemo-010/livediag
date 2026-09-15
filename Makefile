@@ -22,6 +22,8 @@ install:
 	chmod 755 "$(DESTDIR)$(PREFIX)/bin/livediag"
 	cp lib/common.sh lib/report.sh "$(DESTDIR)$(PREFIX)/share/livediag/lib/"
 	chmod 644 "$(DESTDIR)$(PREFIX)/share/livediag/lib/"*.sh
+	cp lib/stages.py "$(DESTDIR)$(PREFIX)/share/livediag/lib/stages.py"
+	chmod 644 "$(DESTDIR)$(PREFIX)/share/livediag/lib/stages.py"
 	cp tests/tests.list "$(DESTDIR)$(PREFIX)/share/livediag/tests/tests.list"
 	@for f in tests/*.sh; do \
 		case "$$f" in */template.sh) continue ;; esac; \
