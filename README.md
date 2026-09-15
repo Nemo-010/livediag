@@ -85,6 +85,7 @@ lib/report.sh            results.tsv -> report.txt
 tests/tests.list         the manifest: id, category, name, script, timeout, essential, description
 tests/NN-*.sh            one module per device function
 tests/template.sh        starting point for a new module
+Makefile                 check (sh -n everything) and install
 packaging/alpine/        APKBUILD for an Alpine package
 ```
 
