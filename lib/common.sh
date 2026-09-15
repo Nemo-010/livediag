@@ -423,8 +423,10 @@ lg_tcp() {
         nc -z -w 3 "$_lg_host" "$_lg_port" >/dev/null 2>&1 && return 0
     fi
     if lg_have curl; then
-        curl -sS --max-time 5 -o /dev/null "https://$_lg_host:$_lg_port" >/dev/null 2>&1 && return 0
-        curl -sS --max-time 5 -o /dev/null "http://$_lg_host:$_lg_port" >/dev/null 2>&1 && return 0
+        # -k because this is a reachability check, not a security check: a
+        # captive portal or a self-signed interceptor still proves the port
+        # answers, which is all we are asking.
+        curl -ksS --max-time 5 -o /dev/null "https://$_lg_host:$_lg_port" >/dev/null 2>&1 && return 0
     fi
     return 1
 }
