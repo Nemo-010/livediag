@@ -9,7 +9,37 @@ wifi=""
 for i in $(lg_net_ifaces); do
     lg_is_wireless "$i" && wifi="$wifi $i"
 done
-[ -n "$wifi" ] || lg_skip "no wireless interface detected"
+
+if [ -z "$wifi" ]; then
+    # A network controller with no driver bound is the classic "bad Wi-Fi
+    # drivers" case: the card is there, Linux just cannot use it.
+    unbound=""
+    for d in /sys/bus/pci/devices/*; do
+        [ -r "$d/class" ] || continue
+        case "$(cat "$d/class" 2>/dev/null)" in
+        0x0280*) ;;
+        *) continue ;;
+        esac
+        [ -e "$d/driver" ] && continue
+        vid=$(cat "$d/vendor" 2>/dev/null)
+        did=$(cat "$d/device" 2>/dev/null)
+        unbound="$unbound ${vid#0x}:${did#0x}"
+    done
+    if [ -n "$unbound" ]; then
+        lg_ui_warn "No Wi-Fi interface is available.
+
+A network controller is present (${unbound# }), but no kernel driver is bound to it.  If that is the Wi-Fi card, Wi-Fi will not work until the right driver or firmware package is installed."
+        lg_fail "network controller present but unbound:${unbound}"
+    fi
+    if lg_is_laptop; then
+        lg_ui_warn "No Wi-Fi interface is available.
+
+This looks like a portable machine, so a Wi-Fi card is likely.  Either its driver or firmware is missing, or the radio is switched off."
+        lg_warn "no wireless interface on a portable machine"
+    fi
+    lg_ui_info "No Wi-Fi adapter is present (a desktop with wired networking will look like this)."
+    lg_skip "no wireless interface detected"
+fi
 
 wifi=${wifi# }
 iface=$(printf '%s\n' $wifi | head -n1)

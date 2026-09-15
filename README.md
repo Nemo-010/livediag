@@ -141,7 +141,19 @@ modules never call it directly:
 | `lg_ui_menu` | single choice from a list |
 | `lg_ui_checklist` | multi choice (used by the runner) |
 | `lg_ui_text` | scrollable file viewer (report, logs) |
+| `lg_ui_table` | a plain status/check/note table (the end summary) |
+| `lg_progress_start` / `lg_progress_set` / `lg_progress_finish` | the live progress window |
 | `lg_busy TITLE CMD OUTFILE` | a pulsating progress window around a command |
+
+The runner keeps a progress window open for the whole run: a bar with the
+check in progress, how many have passed, warned, failed or been skipped, and
+the names of the last few checks that passed.  When it finishes, a summary
+table lists every check with its status and its note, worst first.
+
+When hardware is simply absent the report says so rather than staying quiet.
+A Wi-Fi card whose driver never binds is called out by name and bus id, and a
+portable machine with no wireless interface at all is a warning, because that
+usually means a missing driver or firmware, not a missing card.
 
 When there is no display, or with `--no-ui`, the same helpers degrade to the
 terminal.  With `--non-interactive` they answer "no" to manual questions, so

@@ -326,6 +326,26 @@ lg_ui_text() {
     fi
 }
 
+# lg_ui_table TITLE TEXT status check note [status check note ...]
+# A plain table window: one row per check, with its note.
+lg_ui_table() {
+    _lg_t=$1
+    _lg_x=$2
+    shift 2
+    if lg_ui_available; then
+        zenity --list --no-markup --title="$_lg_t" --text="$_lg_x" \
+            --width=880 --height=580 \
+            --column=Status --column=Check --column=Notes "$@" >/dev/null 2>&1
+        return 0
+    fi
+    [ -n "$_lg_x" ] && printf '\n%s\n' "$_lg_x" >&2
+    while [ "$#" -ge 3 ]; do
+        printf '  %-8s %-22s %s\n' "$1" "$2" "$3" >&2
+        shift 3
+    done
+    return 0
+}
+
 # lg_busy TITLE COMMAND OUTFILE
 # Runs COMMAND (a shell string) behind a pulsating progress dialog.
 lg_busy() {
@@ -345,6 +365,80 @@ lg_busy() {
         return $?
     fi
     eval "$_lg_cmd" >"$_lg_out" 2>&1
+}
+
+# --------------------------------------------------------------------------
+# live progress window
+# --------------------------------------------------------------------------
+
+LG_PROGRESS_FIFO=""
+LG_PROGRESS_PID=""
+LG_PROGRESS_TOTAL=0
+
+# lg_progress_start TITLE TOTAL
+lg_progress_start() {
+    LG_PROGRESS_TITLE=${1:-livediag}
+    LG_PROGRESS_TOTAL=${2:-0}
+    LG_PROGRESS_FIFO=""
+    LG_PROGRESS_PID=""
+    if lg_ui_available; then
+        _lg_fifo="${TMPDIR:-/tmp}/livediag-progress.$$"
+        rm -f "$_lg_fifo"
+        if mkfifo "$_lg_fifo" 2>/dev/null; then
+            LG_PROGRESS_FIFO=$_lg_fifo
+            (
+                zenity --progress --no-markup --no-cancel --auto-close \
+                    --title="$LG_PROGRESS_TITLE" \
+                    --text="Preparing the checks..." \
+                    --percentage=0 --width=540 <"$_lg_fifo" >/dev/null 2>&1
+            ) &
+            LG_PROGRESS_PID=$!
+            # Read-write so this never blocks waiting for a reader and never
+            # raises SIGPIPE if zenity goes away early.
+            exec 9<>"$_lg_fifo"
+            return 0
+        fi
+    fi
+    printf 'livediag: %s check(s) queued\n' "$LG_PROGRESS_TOTAL" >&2
+}
+
+# lg_progress_set DONE MESSAGE
+lg_progress_set() {
+    _lg_done=$1
+    shift
+    _lg_msg=$*
+    _lg_pct=0
+    if [ "${LG_PROGRESS_TOTAL:-0}" -gt 0 ] 2>/dev/null; then
+        _lg_pct=$((_lg_done * 100 / LG_PROGRESS_TOTAL))
+    fi
+    [ "$_lg_pct" -gt 100 ] && _lg_pct=100
+    if [ -n "$LG_PROGRESS_FIFO" ]; then
+        printf '%s\n# %s\n' "$_lg_pct" "$_lg_msg" >&9 2>/dev/null || true
+    else
+        printf 'livediag: [%s/%s] %s\n' "$_lg_done" "$LG_PROGRESS_TOTAL" "$_lg_msg" >&2
+    fi
+}
+
+lg_progress_finish() {
+    if [ -n "$LG_PROGRESS_FIFO" ]; then
+        printf '100\n# All checks finished\n' >&9 2>/dev/null || true
+        exec 9>&- 2>/dev/null || true
+        wait "$LG_PROGRESS_PID" 2>/dev/null || true
+        rm -f "$LG_PROGRESS_FIFO"
+        LG_PROGRESS_FIFO=""
+    fi
+}
+
+# True when this looks like a portable machine.
+lg_is_laptop() {
+    case "$(cat /sys/class/dmi/id/chassis_type 2>/dev/null)" in
+    8 | 9 | 10 | 11 | 14) return 0 ;;
+    esac
+    for _lg_b in /sys/class/power_supply/*; do
+        [ -r "$_lg_b/type" ] || continue
+        [ "$(cat "$_lg_b/type" 2>/dev/null)" = "Battery" ] && return 0
+    done
+    return 1
 }
 
 # --------------------------------------------------------------------------

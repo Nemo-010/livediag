@@ -220,19 +220,23 @@ if [ "$count" -eq 0 ]; then
     exit 1
 fi
 
-lg_ui_info "livediag $LG_VERSION
-
-$count module(s) will run.  Each one explains itself before doing anything destructive.
-Results: $LG_SESSION"
+lg_progress_start "livediag - $count checks" "$count"
+lg_progress_set 0 "Starting $count checks.  This window follows along."
 
 # --------------------------------------------------------------------------
 # run
 # --------------------------------------------------------------------------
 
 ran=0
+pass=0
+warn=0
+fail=0
+skip=0
+passed_names=""
 while IFS="$(printf '\t')" read -r id cat name script timeout desc <&3; do
     [ -n "$id" ] || continue
     ran=$((ran + 1))
+    lg_progress_set $((ran - 1)) "Now: $name  |  $pass passed, $warn warn, $fail failed, $skip skipped"
     printf '\n\033[1m[%d/%d] %s\033[0m\n' "$ran" "$count" "$name" >&2
     if lg_have timeout; then
         timeout "$timeout" sh "$LG_ROOT/tests/$script"
@@ -252,20 +256,50 @@ while IFS="$(printf '\t')" read -r id cat name script timeout desc <&3; do
             status=WARN
         fi
     fi
+    case "$status" in
+    PASS) pass=$((pass + 1)); passed_names="$passed_names $name" ;;
+    WARN) warn=$((warn + 1)) ;;
+    SKIP) skip=$((skip + 1)) ;;
+    *) fail=$((fail + 1)) ;;
+    esac
+    recent=$(printf '%s' "$passed_names" | awk '{
+        n = NF; s = ""
+        for (i = (n > 3 ? n - 2 : 1); i <= n; i++) s = s (s ? ", " : "") $i
+        print s
+    }')
+    lg_progress_set "$ran" "Done: $name ($status)  |  $pass passed, $warn warn, $fail failed, $skip skipped${recent:+  |  just passed: $recent}"
     printf '  -> %s\n' "$status" >&2
 done 3<"$SELECTED"
+
+lg_progress_finish
 
 lg_write_environment
 sh "$LG_ROOT/lib/report.sh" "$LG_SESSION" >/dev/null 2>&1
 
 printf '\nlivediag: done.  Report: %s/report.txt\n' "$LG_SESSION" >&2
+
+# Summary table, worst first.  Table only, with the note for every check.
+summary="$LG_SESSION/summary.tsv"
+awk -F'\t' '{
+    r = 3
+    if ($3 == "FAIL" || $3 == "TIMEOUT") r = 0
+    else if ($3 == "WARN") r = 1
+    else if ($3 == "SKIP") r = 2
+    printf "%s\t%s\t%s\t%s\n", r, $3, $4, $5
+}' "$LG_RESULTS" | sort -t"$(printf '\t')" -k1,1n -k2,2 >"$summary"
+
+set --
+while IFS="$(printf '\t')" read -r _rank _status _name _note; do
+    [ -n "$_status" ] || continue
+    set -- "$@" "$_status" "$_name" "$_note"
+done <"$summary"
+
+lg_ui_table "livediag - $count checks: $pass passed, $warn warning, $fail failed, $skip skipped" "" "$@"
+
 if lg_ui_available; then
-    lg_ui_text "livediag report - $LG_SESSION" "$LG_SESSION/report.txt"
-    lg_ui_info "Report saved to:
+    lg_ui_info "Full report saved to:
 
-$LG_SESSION/report.txt
-
-Thank you for testing.  To provide the software that shapes the world of tomorrow."
+$LG_SESSION/report.txt"
 else
-    cat "$LG_SESSION/report.txt" >&2
+    printf '\nlivediag: full report: %s/report.txt\n' "$LG_SESSION" >&2
 fi
